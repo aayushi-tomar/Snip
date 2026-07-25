@@ -225,7 +225,7 @@ def shorten_endpoint():
 
     return jsonify({
         "code": code,
-        "short_url": f"http://localhost:5000/{code}"
+        "short_url": f"{request.host_url}{code}"
     }), 201
 
 
