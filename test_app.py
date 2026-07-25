@@ -158,7 +158,7 @@ def test_stats_endpoint_returns_page_for_valid_code(mock_safe, client):
 
     stats_response = client.get(f"/stats/{code}")
     assert stats_response.status_code == 200
-    assert b"Stats for" in stats_response.data
+    assert code.encode() in stats_response.data
 
 
 def test_stats_endpoint_404s_for_unknown_code(client):
