@@ -37,6 +37,15 @@ def init_db():
             created_at TEXT NOT NULL
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS clicks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT NOT NULL,
+            clicked_at TEXT NOT NULL,
+            referrer TEXT,
+            user_agent TEXT
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -146,6 +155,39 @@ def resolve(code):
     return row[0] if row else None
 
 
+def log_click(code, referrer, user_agent):
+    conn = sqlite3.connect(DB_FILE)
+    conn.execute(
+        "INSERT INTO clicks (code, clicked_at, referrer, user_agent) VALUES (?, ?, ?, ?)",
+        (code, datetime.now().isoformat(), referrer or "direct", user_agent or "unknown")
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_click_stats(code):
+    conn = sqlite3.connect(DB_FILE)
+    total = conn.execute("SELECT COUNT(*) FROM clicks WHERE code = ?", (code,)).fetchone()[0]
+
+    by_day = conn.execute("""
+        SELECT substr(clicked_at, 1, 10) as day, COUNT(*) as count
+        FROM clicks WHERE code = ?
+        GROUP BY day ORDER BY day
+    """, (code,)).fetchall()
+
+    recent = conn.execute("""
+        SELECT clicked_at, referrer, user_agent FROM clicks
+        WHERE code = ? ORDER BY clicked_at DESC LIMIT 20
+    """, (code,)).fetchall()
+
+    conn.close()
+    return {
+        "total": total,
+        "by_day": [{"day": d, "count": c} for d, c in by_day],
+        "recent": [{"clicked_at": t, "referrer": r, "user_agent": u} for t, r, u in recent],
+    }
+
+
 # Initialize the database at import time so this also works when run
 # under a production server like Gunicorn (which never executes the
 # `if __name__ == "__main__":` block below).
@@ -194,7 +236,8 @@ def home():
 
                 if (response.ok) {
                     resultDiv.className = "success";
-                    resultDiv.innerHTML = "Shortened! <a href='" + data.short_url + "' target='_blank'>" + data.short_url + "</a>";
+                    resultDiv.innerHTML = "Shortened! <a href='" + data.short_url + "' target='_blank'>" + data.short_url + "</a>"
+                        + " &middot; <a href='/stats/" + data.code + "' target='_blank'>view stats</a>";
                 } else {
                     resultDiv.className = "error";
                     resultDiv.innerHTML = "Error: " + data.error;
@@ -234,7 +277,80 @@ def resolve_endpoint(code):
     original_url = resolve(code)
     if not original_url:
         return jsonify({"error": "Code not found"}), 404
+
+    log_click(code, request.referrer, request.headers.get("User-Agent"))
     return redirect(original_url)
+
+
+@app.route("/stats/<code>", methods=["GET"])
+def stats_endpoint(code):
+    original_url = resolve(code)
+    if not original_url:
+        return jsonify({"error": "Code not found"}), 404
+
+    stats = get_click_stats(code)
+
+    days_labels = [row["day"] for row in stats["by_day"]]
+    days_counts = [row["count"] for row in stats["by_day"]]
+
+    recent_rows = "".join(
+        f"<tr><td>{r['clicked_at']}</td><td>{r['referrer']}</td><td>{r['user_agent'][:60]}</td></tr>"
+        for r in stats["recent"]
+    ) or "<tr><td colspan='3'>No clicks yet</td></tr>"
+
+    return f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Stats for /{code}</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+    <style>
+        body {{ font-family: sans-serif; max-width: 700px; margin: 60px auto; padding: 0 20px; }}
+        h1 {{ color: #222; }}
+        .stat-box {{ display: inline-block; padding: 15px 25px; background: #f0f0f0; border-radius: 8px; margin-right: 10px; }}
+        .stat-number {{ font-size: 28px; font-weight: bold; }}
+        table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+        th, td {{ text-align: left; padding: 8px; border-bottom: 1px solid #eee; font-size: 13px; }}
+        th {{ background: #fafafa; }}
+        a {{ color: #0066cc; }}
+    </style>
+</head>
+<body>
+    <p><a href="/">&larr; Back to shortener</a></p>
+    <h1>Stats for /{code}</h1>
+    <p>Original URL: <a href="{original_url}" target="_blank">{original_url}</a></p>
+
+    <div class="stat-box">
+        <div class="stat-number">{stats['total']}</div>
+        <div>Total clicks</div>
+    </div>
+
+    <h3>Clicks over time</h3>
+    <canvas id="clicksChart" height="100"></canvas>
+
+    <h3>Recent clicks</h3>
+    <table>
+        <tr><th>When</th><th>Referrer</th><th>Browser / device</th></tr>
+        {recent_rows}
+    </table>
+
+    <script>
+        new Chart(document.getElementById('clicksChart'), {{
+            type: 'bar',
+            data: {{
+                labels: {days_labels},
+                datasets: [{{
+                    label: 'Clicks per day',
+                    data: {days_counts},
+                    backgroundColor: '#4caf50'
+                }}]
+            }},
+            options: {{ scales: {{ y: {{ beginAtZero: true, ticks: {{ stepSize: 1 }} }} }} }}
+        }});
+    </script>
+</body>
+</html>
+    """
 
 
 if __name__ == "__main__":
