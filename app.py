@@ -1,17 +1,31 @@
 """
-URL Shortener - complete working version
+URL Shortener - final version
 Run with: python app.py
-Then visit http://localhost:5000/shorten (POST) or http://localhost:5000/<code> (GET)
+
+Requires a Google Safe Browsing API key set as an environment variable
+GOOGLE_SAFE_BROWSING_API_KEY (see README for how to get one - it's free).
 """
 
+import os
 import random
 import string
 import sqlite3
 from datetime import datetime
+
+import requests
 from flask import Flask, request, jsonify, redirect
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
 DB_FILE = "urls.db"
+SAFE_BROWSING_API_KEY = os.environ.get("GOOGLE_SAFE_BROWSING_API_KEY")
+SAFE_BROWSING_URL = "https://safebrowsing.googleapis.com/v4/threatMatches:find"
+
+# In-memory cache so we don't re-check the same URL against the API repeatedly.
+# Format: { "https://example.com": True/False }
+_safety_cache = {}
 
 
 def init_db():
@@ -43,15 +57,65 @@ def code_exists(code):
     return row is not None
 
 
+def check_safe_browsing_api(url):
+    """
+    Calls the real Google Safe Browsing API.
+    Returns True if the URL is safe, False if it's flagged.
+    Raises an exception if the API call itself fails (network error, bad key, etc)
+    so the caller can decide how to handle that separately from "URL is unsafe".
+    """
+    if not SAFE_BROWSING_API_KEY:
+        raise RuntimeError("GOOGLE_SAFE_BROWSING_API_KEY is not set")
+
+    payload = {
+        "client": {"clientId": "snip-url-shortener", "clientVersion": "1.0.0"},
+        "threatInfo": {
+            "threatTypes": [
+                "MALWARE", "SOCIAL_ENGINEERING", "UNWANTED_SOFTWARE", "POTENTIALLY_HARMFUL_APPLICATION"
+            ],
+            "platformTypes": ["ANY_PLATFORM"],
+            "threatEntryTypes": ["URL"],
+            "threatEntries": [{"url": url}],
+        },
+    }
+
+    response = requests.post(
+        SAFE_BROWSING_URL,
+        params={"key": SAFE_BROWSING_API_KEY},
+        json=payload,
+        timeout=5,
+    )
+    response.raise_for_status()  # raises if the API call itself failed (bad key, 4xx/5xx, etc)
+
+    data = response.json()
+    # If "matches" is present and non-empty, Google found a threat match -> unsafe.
+    return "matches" not in data or not data["matches"]
+
+
 def is_safe_url(url):
     """
-    Placeholder safety check. Swap this out for a real call to the
-    Google Safe Browsing API or VirusTotal API once you have a key.
-    For now it blocks a small hardcoded list so the feature is demoable
-    without needing an API key today.
+    Checks a URL against the Google Safe Browsing API, with caching.
+
+    Fallback behavior (documented decision, "fail closed"):
+    if the API call itself fails for any reason (network issue, bad key,
+    rate limit, timeout), we treat the URL as UNSAFE and reject it, rather
+    than letting it through unchecked. This is more cautious but means the
+    shortener could reject legitimate URLs during an API outage - a
+    deliberate reliability/availability tradeoff, chosen here because
+    "silently letting a malicious link through" is worse than
+    "occasionally block a legitimate one during an outage".
     """
-    known_bad_patterns = ["malware-test.com", "phishing-test.com"]
-    return not any(bad in url for bad in known_bad_patterns)
+    if url in _safety_cache:
+        return _safety_cache[url]
+
+    try:
+        safe = check_safe_browsing_api(url)
+    except Exception:
+        # Fail closed: if we can't verify safety, don't allow it through.
+        safe = False
+
+    _safety_cache[url] = safe
+    return safe
 
 
 def shorten(url):
@@ -59,7 +123,7 @@ def shorten(url):
         raise ValueError("Invalid URL")
 
     if not is_safe_url(url):
-        raise ValueError("URL flagged as unsafe and cannot be shortened")
+        raise ValueError("URL flagged as unsafe (or safety check unavailable) and cannot be shortened")
 
     code = generate_code()
     while code_exists(code):
@@ -80,6 +144,64 @@ def resolve(code):
     row = conn.execute("SELECT original_url FROM urls WHERE code = ?", (code,)).fetchone()
     conn.close()
     return row[0] if row else None
+
+
+@app.route("/", methods=["GET"])
+def home():
+    return """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Snip - URL Shortener</title>
+    <style>
+        body { font-family: sans-serif; max-width: 500px; margin: 80px auto; padding: 0 20px; }
+        h1 { color: #222; }
+        input[type=text] { width: 100%; padding: 10px; font-size: 16px; box-sizing: border-box; margin-bottom: 10px; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+        #result { margin-top: 20px; padding: 15px; border-radius: 6px; }
+        .success { background: #e6ffe6; border: 1px solid #4caf50; }
+        .error { background: #ffe6e6; border: 1px solid #f44336; }
+        a { word-break: break-all; }
+    </style>
+</head>
+<body>
+    <h1>Snip — URL Shortener</h1>
+    <p>Paste a long URL below and shorten it.</p>
+    <input type="text" id="urlInput" placeholder="https://example.com/some/very/long/url">
+    <button onclick="shortenUrl()">Shorten</button>
+    <div id="result"></div>
+
+    <script>
+        async function shortenUrl() {
+            const url = document.getElementById('urlInput').value;
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = "Working...";
+            resultDiv.className = "";
+
+            try {
+                const response = await fetch('/shorten', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url })
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    resultDiv.className = "success";
+                    resultDiv.innerHTML = "Shortened! <a href='" + data.short_url + "' target='_blank'>" + data.short_url + "</a>";
+                } else {
+                    resultDiv.className = "error";
+                    resultDiv.innerHTML = "Error: " + data.error;
+                }
+            } catch (err) {
+                resultDiv.className = "error";
+                resultDiv.innerHTML = "Something went wrong: " + err;
+            }
+        }
+    </script>
+</body>
+</html>
+    """
 
 
 @app.route("/shorten", methods=["POST"])
