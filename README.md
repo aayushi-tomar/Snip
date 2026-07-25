@@ -50,4 +50,6 @@ Redirects to the original URL.
 ## Why the safety check matters
 Most beginner URL shorteners accept any input blindly. This one validates the URL
 against a safety check first and rejects known-malicious links — the kind of
-guardrail that matters once a service like this is public-facing.
+guardrail that matters once a service like this is public-facce
+
+Live-https://snip-xhgh.onrender.com
