@@ -1,1 +1,5 @@
 flask
+requests
+python-dotenv
+pytest
+gunicorn
