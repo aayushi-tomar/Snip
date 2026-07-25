@@ -146,6 +146,12 @@ def resolve(code):
     return row[0] if row else None
 
 
+# Initialize the database at import time so this also works when run
+# under a production server like Gunicorn (which never executes the
+# `if __name__ == "__main__":` block below).
+init_db()
+
+
 @app.route("/", methods=["GET"])
 def home():
     return """
