@@ -399,8 +399,9 @@ def home():
 
         .shorten-box {{
             background: var(--card); border: 1px solid var(--border); border-radius: 12px;
-            padding: 28px; margin: 40px 0 44px; display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap;
+            padding: 28px; margin: 40px 0 44px;
         }}
+        .shorten-row {{ display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }}
         .shorten-field {{ flex: 1; min-width: 260px; }}
         input[type=text] {{
             width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
@@ -410,6 +411,7 @@ def home():
         button {{
             background: var(--mint); color: #06120d; border: none; border-radius: 8px;
             padding: 13px 20px; font-weight: 700; font-size: 14px; cursor: pointer; white-space: nowrap;
+            flex-shrink: 0;
         }}
         button:hover {{ filter: brightness(1.08); }}
         button:focus-visible {{ outline: 2px solid var(--mint); outline-offset: 2px; }}
@@ -463,12 +465,14 @@ def home():
         </div>
 
         <div class="shorten-box">
-            <div class="shorten-field">
-                <div class="muted-eyebrow" style="margin-bottom:8px;">Paste your long URL</div>
-                <input type="text" id="urlInput" placeholder="https://example.com/very/long/path/to/something">
-                <div id="result"></div>
+            <div class="muted-eyebrow" style="margin-bottom:8px;">Paste your long URL</div>
+            <div class="shorten-row">
+                <div class="shorten-field">
+                    <input type="text" id="urlInput" placeholder="https://example.com/very/long/path/to/something">
+                </div>
+                <button onclick="shortenUrl()">Shorten URL &rarr;</button>
             </div>
-            <button onclick="shortenUrl()">Shorten URL &rarr;</button>
+            <div id="result"></div>
         </div>
 
         <div class="recent-head">
