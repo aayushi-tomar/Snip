@@ -444,6 +444,7 @@ def home():
         <div class="nav-links">
             <a href="/" class="active">Dashboard</a>
             <a href="/analytics">Analytics</a>
+            <a href="/settings">Settings</a>
         </div>
     </nav>
     <main>
@@ -579,6 +580,7 @@ def analytics_page():
         <div class="nav-links">
             <a href="/">Dashboard</a>
             <a href="/analytics" class="active">Analytics</a>
+            <a href="/settings">Settings</a>
         </div>
     </nav>
     <main>
@@ -694,7 +696,7 @@ def stats_endpoint(code):
 <body>
     <nav>
         <div class="logo"><span class="logo-mark"></span> snip</div>
-        <div class="nav-links"><a href="/">Dashboard</a><a href="/analytics">Analytics</a></div>
+        <div class="nav-links"><a href="/">Dashboard</a><a href="/analytics">Analytics</a><a href="/settings">Settings</a></div>
     </nav>
     <main>
         <a class="back" href="/">&larr; back to dashboard</a>
@@ -740,6 +742,95 @@ def stats_endpoint(code):
                 }}
             }}
         }});
+    </script>
+</body>
+</html>
+    """
+
+
+@app.route("/settings", methods=["GET"])
+def settings_page():
+    return f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Snip &middot; Settings</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        {BASE_STYLE}
+        main {{ max-width: 560px; }}
+        h1 {{ font-size: 34px; font-weight: 800; margin: 8px 0 30px; }}
+        .field {{ margin-bottom: 20px; }}
+        .field label {{
+            display: block; font-family: 'JetBrains Mono', monospace; font-size: 11px;
+            letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px;
+        }}
+        .field input {{
+            width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+            padding: 13px 14px; color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 13px;
+        }}
+        .field input:focus {{ outline: none; border-color: var(--mint); }}
+        .field input::placeholder {{ color: var(--muted); }}
+        .field-card {{ background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin-bottom: 16px; }}
+        button {{
+            background: var(--mint); color: #06120d; border: none; border-radius: 8px;
+            padding: 13px 26px; font-weight: 700; font-size: 14px; cursor: pointer;
+        }}
+        button:hover {{ filter: brightness(1.08); }}
+        button:focus-visible {{ outline: 2px solid var(--mint); outline-offset: 2px; }}
+        .notice {{
+            margin-top: 16px; font-size: 12px; color: var(--muted);
+            border-top: 1px dashed var(--border); padding-top: 14px;
+        }}
+        #save-msg {{ font-size: 12px; color: var(--mint); margin-top: 12px; display: none; }}
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="logo"><span class="logo-mark"></span> snip</div>
+        <div class="nav-links">
+            <a href="/">Dashboard</a>
+            <a href="/analytics">Analytics</a>
+            <a href="/settings" class="active">Settings</a>
+        </div>
+    </nav>
+    <main>
+        <div class="eyebrow">SETTINGS</div>
+        <h1>Account</h1>
+
+        <div class="field-card">
+            <div class="field">
+                <label>Custom Domain</label>
+                <input type="text" placeholder="yourdomain.com">
+            </div>
+            <div class="field">
+                <label>Username</label>
+                <input type="text" placeholder="your-username">
+            </div>
+            <div class="field">
+                <label>Email</label>
+                <input type="text" placeholder="you@example.com">
+            </div>
+        </div>
+
+        <button onclick="fakeSave()">Save Changes</button>
+        <div id="save-msg">Saved (locally only &mdash; see note below).</div>
+
+        <div class="notice">
+            This project doesn't have user accounts yet, so these settings aren't
+            connected to anything real &mdash; nothing here is stored or affects
+            the dashboard. It's included to match the full design system. A real
+            version would need login and a per-user database, which is a natural
+            next step for this project.
+        </div>
+    </main>
+
+    <script>
+        function fakeSave() {{
+            document.getElementById('save-msg').style.display = 'block';
+        }}
     </script>
 </body>
 </html>
